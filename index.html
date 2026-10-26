@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="dark">
 <title>Wish Fork — a song that keeps deciding where to go</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9C%A6%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css?v=2">
 </head>
 <body>
 
@@ -65,10 +65,14 @@
       <input type="checkbox" id="attune">
       <span>attune to local weather&ensp;<em id="attune-state"></em></span>
     </label>
+    <label class="attune" id="motion-row" style="display:none">
+      <input type="checkbox" id="motion">
+      <span>feel tilt — the accelerometer&ensp;<em id="motion-state"></em></span>
+    </label>
     <div class="begin-actions">
       <button id="btn-begin">make a wish</button>
     </div>
-    <p class="hint">← → choose at a fork&ensp;·&ensp;space to drift&ensp;·&ensp;best with eyes soft</p>
+    <p class="hint">← → choose at a fork&ensp;·&ensp;space to drift&ensp;·&ensp;move — the piece listens&ensp;·&ensp;best with eyes soft</p>
   </div>
 </div>
 
@@ -86,11 +90,12 @@
   </div>
 </div>
 
-<script src="js/decide.js"></script>
-<script src="js/engine.js"></script>
-<script src="js/segments.js"></script>
-<script src="js/visuals.js"></script>
-<script src="js/ui.js"></script>
-<script src="js/main.js"></script>
+<script src="js/decide.js?v=2"></script>
+<script src="js/presence.js?v=2"></script>
+<script src="js/engine.js?v=2"></script>
+<script src="js/segments.js?v=2"></script>
+<script src="js/visuals.js?v=2"></script>
+<script src="js/ui.js?v=2"></script>
+<script src="js/main.js?v=2"></script>
 </body>
 </html>

@@ -29,7 +29,8 @@ window.Engine = (function () {
 
   let ctx = null;
   let sum, tape, soft, comp, master, analyser;
-  let convA, convB, shimHP, shimDelay, shimFB, shimOut;
+  let convA, convB, shimHP, shimDelay, shimFB, shimOut, shimTrim;
+  let tilt, padTilt;
   const bus = {}; // pad, voice, glitch, sub — each: {in, duck, dry, rev, shim}
   const curveCache = {};
   const noiseB = { buf: null };
@@ -130,7 +131,11 @@ window.Engine = (function () {
     analyser.fftSize = 2048; analyser.smoothingTimeConstant = 0.85;
 
     sum.connect(tape); tape.connect(soft); soft.connect(comp);
-    comp.connect(master); master.connect(analyser); analyser.connect(ctx.destination);
+    // presence pan: lean left, the wall leans left
+    tilt = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    if (tilt) { comp.connect(tilt); tilt.connect(master); }
+    else comp.connect(master);
+    master.connect(analyser); analyser.connect(ctx.destination);
     wow.start(); flut.start();
 
     // reverb A — long hall (shorter tail in lite mode)
@@ -147,22 +152,30 @@ window.Engine = (function () {
     shimMod.connect(shimModG); shimModG.connect(shimDelay.delayTime); shimMod.start();
     shimFB = ctx.createGain(); shimFB.gain.value = LITE ? 0.6 : 0.7;
     shimOut = ctx.createGain(); shimOut.gain.value = 0.9;
+    shimTrim = ctx.createGain(); shimTrim.gain.value = 1;   // presence lifts this
     shimHP.connect(convB); convB.connect(shimOut); shimOut.connect(sum);
     convB.connect(shimDelay); shimDelay.connect(shimFB); shimFB.connect(shimHP);
 
     // buses — lvl (moment level) and duck (thump dips) are SEPARATE params:
-    // never cancel each other's automation (that snap was a pop source)
-    const mkBus = () => {
+    // never cancel each other's automation (that snap was a pop source).
+    // an optional insert sits between duck and the sends (pads get the
+    // presence tilt-filter).
+    const mkBus = (insert) => {
       const input = ctx.createGain();
       const lvl = ctx.createGain(); lvl.gain.value = 0;
       const duck = ctx.createGain(); duck.gain.value = 1;
       const dry = ctx.createGain(), rev = ctx.createGain(), shim = ctx.createGain();
       input.connect(lvl); lvl.connect(duck);
-      dry.connect(sum); rev.connect(revInA); shim.connect(shimHP);
-      duck.connect(dry); duck.connect(rev); duck.connect(shim);
+      dry.connect(sum); rev.connect(revInA); shim.connect(shimTrim);
+      const post = insert || duck;
+      if (insert) duck.connect(insert);
+      post.connect(dry); post.connect(rev); post.connect(shim);
       return { in: input, lvl, duck, dry, rev, shim };
     };
-    bus.pad = mkBus(); bus.voice = mkBus(); bus.glitch = mkBus(); bus.sub = mkBus();
+    padTilt = ctx.createBiquadFilter();          // presence veil: moving down darkens the pads
+    padTilt.type = 'lowpass'; padTilt.frequency.value = 20000; padTilt.Q.value = 0.4;
+    bus.pad = mkBus(padTilt);
+    bus.voice = mkBus(); bus.glitch = mkBus(); bus.sub = mkBus();
 
     // continuous sub drone (A1, slightly drifting)
     const subOsc = mkOsc(mtof(33), 'sine');
@@ -399,6 +412,20 @@ window.Engine = (function () {
 
   function onPulse(cb) { pulses.push(cb); }
 
+  /* ---------- presence (mouse / tilt) ----------
+   * px −1..1 leans the mix; py −1..1 lifts (+) or veils (−) the pads;
+   * energy 0..1 briefly swells the shimmer feedback. All long-tailed. */
+  function setPresence(px, py, energy) {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    if (tilt) tilt.pan.setTargetAtTime(clamp(px * 0.35, -0.5, 0.5), t, 0.6);
+    const pyDown = Math.max(0, -py);
+    padTilt.frequency.setTargetAtTime(20000 * Math.pow(6000 / 20000, pyDown), t, 0.7);
+    shimTrim.gain.setTargetAtTime(1 + Math.max(0, py) * 0.4 + energy * 0.1, t, 0.7);
+    const fb = Math.min(0.82, (LITE ? 0.6 : 0.7) + energy * 0.12);
+    shimFB.gain.setTargetAtTime(fb, t, 0.8);
+  }
+
   function fadeIn() {
     if (!ctx) return;
     if (ctx.state === 'suspended') ctx.resume();
@@ -417,10 +444,18 @@ window.Engine = (function () {
 
   return {
     init, applyParams, spawnChord, spawnVoice, glitchStep,
-    bands, onPulse, fadeIn, fadeOut,
+    bands, onPulse, fadeIn, fadeOut, setPresence,
     get lite() { return LITE; },
     get now() { return ctx ? ctx.currentTime : 0; },
     get started() { return !!ctx; },
+    get presence() {
+      return ctx ? {
+        pan: tilt ? +tilt.pan.value.toFixed(2) : null,
+        veil: Math.round(padTilt.frequency.value),
+        shimTrim: +shimTrim.gain.value.toFixed(2),
+        shimFB: +shimFB.gain.value.toFixed(2)
+      } : null;
+    },
     mtof
   };
 })();

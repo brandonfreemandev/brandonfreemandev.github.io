@@ -20,6 +20,7 @@ window.Visuals = (function () {
   let forkGlow = null;       // {a:[r,g,b], b:[r,g,b]}
   let bloomFx = null;        // {col:[r,g,b], t0}
   let ended = false;
+  const pres = { x: 0, y: 0, e: 0 };   // listener presence, set from main tick
 
   const LITE = !!(window.Engine && Engine.lite);
   const ORB_COUNT = LITE ? 4 : 7;
@@ -68,6 +69,7 @@ window.Visuals = (function () {
   })();
 
   function melt(amt) { shear = Math.min(1.4, shear + amt * 0.35); }
+  function setPresence(x, y, e) { pres.x = x; pres.y = y; pres.e = e; }
   function forkWindow(glows) { forkGlow = glows; }
   function bloom(side) {
     if (!forkGlow) return;
@@ -89,10 +91,11 @@ window.Visuals = (function () {
     dst.fillRect(0, 0, W, H);
 
     const scale = 1.0045 + bands.mid * 0.006;
-    const rot = 0.0016 * Math.sin(tt * 0.13) + bands.low * 0.004;
+    const rot = 0.0016 * Math.sin(tt * 0.13) + bands.low * 0.004 + pres.x * 0.0035;
     dst.save();
     dst.globalAlpha = 0.985;
-    dst.translate(W / 2, H / 2);
+    // the field leans and drifts with the listener's presence
+    dst.translate(W / 2 + pres.x * W * 0.018, H / 2 - pres.y * H * 0.014);
     dst.rotate(rot);
     dst.scale(scale, scale);
     dst.translate(-W / 2, -H / 2);
@@ -114,9 +117,10 @@ window.Visuals = (function () {
     dst.globalCompositeOperation = 'lighter';
     for (const o of orbs) {
       const b = bands[o.band] || 0;
-      const x = W / 2 + Math.sin(tt * o.w1 + o.p1) * W * 0.31;
-      const y = H / 2 + Math.cos(tt * o.w2 + o.p2) * H * 0.31;
-      const rad = (0.05 + 0.11 * o.r + b * 0.4) * Math.min(W, H) * (ended ? 0.5 : 1);
+      const x = W / 2 + Math.sin(tt * o.w1 + o.p1) * W * 0.31 + pres.x * W * 0.05;
+      const y = H / 2 + Math.cos(tt * o.w2 + o.p2) * H * 0.31 - pres.y * H * 0.05;
+      const rad = (0.05 + 0.11 * o.r + b * 0.4) * Math.min(W, H) *
+                  (ended ? 0.5 : 1) * (1 + pres.e * 0.3);
       const c = palette.cols[o.ci % palette.cols.length];
       const g = dst.createRadialGradient(x, y, 0, x, y, Math.max(4, rad));
       const a = 0.05 + b * 0.4;
@@ -138,6 +142,10 @@ window.Visuals = (function () {
         dst.fillRect(0, 0, W, H);
       } else bloomFx = null;
     }
+
+    // sustained fast motion keeps the image liquid
+    if (pres.e > 0.5) melt(pres.e * 0.45);
+
     dst.globalCompositeOperation = 'source-over';
 
     /* ---- 3. present fbB (chromatic ghosts skipped in lite mode) ---- */
@@ -186,5 +194,5 @@ window.Visuals = (function () {
   }
   requestAnimationFrame(frame);
 
-  return { setPalette, melt, forkWindow, bloom, finish };
+  return { setPalette, melt, setPresence, forkWindow, bloom, finish };
 })();

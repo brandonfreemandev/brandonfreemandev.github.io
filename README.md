@@ -143,6 +143,23 @@ after you stop moving. The piece is watching back, gently.
 
 ---
 
+## Presence — the body as an instrument
+
+Your physical presence modulates both sound and image, continuously:
+
+| signal | source | what it bends |
+|---|---|---|
+| **position x** | mouse on desktop; phone tilt (accelerometer) | the mix leans with you (±0.35 pan); the light field drifts and slowly spirals toward your side |
+| **position y** | same | up lifts the veil (shimmer send +40%); down darkens the pad wall (lowpass to ~6 kHz); orbs parallax vertically |
+| **energy** | how fast you move / shake | shimmer feedback swells (up to +0.12), glitch density rises, and the image momentarily liquifies |
+
+Everything is heavily smoothed (τ ≈ 0.6–1.7 s) — the room *leans*, it never
+twitches. On phones, enable **feel tilt** on the begin screen (iOS shows its
+motion-permission prompt; without it, touch-drag does the same job). Where
+your hand rests is how the room stays lit — centre is neutral.
+
+---
+
 ## Sound design (all Web Audio, zero samples)
 
 The posture is *Blown a Wish*: gliding, bent, drowned — with an IDM
