@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Wish Fork — a song that keeps deciding where to go</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9C%A6%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<canvas id="veil"></canvas>
+
+<div id="stage">
+  <header id="hud">
+    <div class="hud-side">
+      <span id="moment-num"></span><span id="moment-name">—</span>
+      <span id="phase-chip" title="environment"></span>
+      <span id="temp-chip" title="temperature sensor"></span>
+    </div>
+    <div class="hud-side">
+      <span id="decision-chip"></span>
+      <span id="clock">0:00</span>
+      <span id="seed-chip" title="deterministic seed"></span>
+    </div>
+  </header>
+
+  <div id="ticker"></div>
+
+  <footer id="ribbon" aria-label="journey so far"></footer>
+</div>
+
+<div id="fork" class="veil-overlay hidden" aria-live="polite">
+  <div class="fork-inner">
+    <div class="fork-kicker">the wish forks</div>
+    <div class="cards">
+      <button class="card" id="card-a">
+        <span class="glyph"></span>
+        <span class="word"></span>
+        <span class="whisper"></span>
+      </button>
+      <button class="card" id="card-b">
+        <span class="glyph"></span>
+        <span class="word"></span>
+        <span class="whisper"></span>
+      </button>
+    </div>
+    <div id="fork-timer" aria-hidden="true"><i></i></div>
+    <div class="drift-hint">or do nothing — <b>space</b> to let the room choose</div>
+  </div>
+</div>
+
+<div id="begin" class="veil-overlay">
+  <div class="begin-card">
+    <div class="sigil">✦&ensp;❋&ensp;✦</div>
+    <h1>Wish Fork</h1>
+    <p class="sub">a song that keeps deciding where to go</p>
+    <p class="desc" id="begin-desc">
+      Roughly twice a minute the piece reaches a fork. If you choose, it follows you.
+      If you drift, it reads the hour, the cold, and your stillness — and wishes for you.
+      Eleven forks, about three and a half minutes, every journey shareable.
+    </p>
+    <label class="attune" id="attune-row">
+      <input type="checkbox" id="attune">
+      <span>attune to local weather&ensp;<em id="attune-state"></em></span>
+    </label>
+    <div class="begin-actions">
+      <button id="btn-begin">make a wish</button>
+    </div>
+    <p class="hint">← → choose at a fork&ensp;·&ensp;space to drift&ensp;·&ensp;best with eyes soft</p>
+  </div>
+</div>
+
+<div id="end" class="veil-overlay hidden">
+  <div class="begin-card">
+    <div class="sigil">◌</div>
+    <h1 class="end-title">the wish resolved</h1>
+    <p class="desc" id="end-summary"></p>
+    <div id="journey-line" aria-label="your journey"></div>
+    <div class="begin-actions">
+      <button id="btn-share">share this journey</button>
+      <button id="btn-replay">relive it exactly</button>
+      <button id="btn-again">wish again, differently</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/decide.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/segments.js"></script>
+<script src="js/visuals.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
