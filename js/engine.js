@@ -15,6 +15,18 @@ window.Engine = (function () {
   'use strict';
 
   const AC = window.AudioContext || window.webkitAudioContext;
+
+  /* lite mode: phones / weak cores / Bluetooth — smaller IRs, fewer
+   * oscillators, thinner visuals. Prevents the underrun crackle. */
+  const LITE = (function () {
+    const ua = navigator.userAgent;
+    const mobile = /Android|iPhone|iPad|iPod/i.test(ua) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const cores = navigator.hardwareConcurrency || 4;
+    const mem = navigator.deviceMemory;
+    return mobile || cores <= 4 || (mem && mem <= 4);
+  })();
+
   let ctx = null;
   let sum, tape, soft, comp, master, analyser;
   let convA, convB, shimHP, shimDelay, shimFB, shimOut;
@@ -85,13 +97,28 @@ window.Engine = (function () {
 
   function init() {
     if (ctx) return;
-    ctx = new AC();
+    // 'playback' requests large output buffers: the single biggest cure for
+    // Bluetooth / phone crackle (underruns). Latency is irrelevant here.
+    try { ctx = new AC({ latencyHint: 'playback' }); }
+    catch (e) { ctx = new AC(); }
+
+    // Bluetooth/device changes or iOS interruptions can suspend the graph;
+    // recover it instead of letting it die crackling.
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && ctx && ctx.state !== 'running') ctx.resume().catch(() => {});
+    });
+    if ('onstatechange' in ctx) {
+      ctx.onstatechange = () => {
+        if (ctx && (ctx.state === 'suspended' || ctx.state === 'interrupted') &&
+            master && master.gain.value > 0.001) ctx.resume().catch(() => {});
+      };
+    }
 
     // master path: sum → tape(wow) → softclip → comp → master → analyser → out
     sum = ctx.createGain(); sum.gain.value = 1;
     tape = ctx.createDelay(0.2); tape.delayTime.value = 0.02;
     const wow = mkOsc(0.37, 'sine'), wowG = ctx.createGain(); wowG.gain.value = 0.0013;
-    const flut = mkOsc(5.3, 'sine'), flutG = ctx.createGain(); flutG.gain.value = 0.00034;
+    const flut = mkOsc(5.3, 'sine'), flutG = ctx.createGain(); flutG.gain.value = LITE ? 0 : 0.00034;
     wow.connect(wowG); wowG.connect(tape.delayTime);
     flut.connect(flutG); flutG.connect(tape.delayTime);
     soft = ctx.createWaveShaper(); soft.curve = fuzzCurve(1.35);
@@ -106,31 +133,34 @@ window.Engine = (function () {
     comp.connect(master); master.connect(analyser); analyser.connect(ctx.destination);
     wow.start(); flut.start();
 
-    // reverb A — long hall
-    convA = ctx.createConvolver(); convA.buffer = makeIR(7.5, 2.6);
+    // reverb A — long hall (shorter tail in lite mode)
+    convA = ctx.createConvolver(); convA.buffer = makeIR(LITE ? 3.4 : 7.5, 2.6);
     const revInA = ctx.createGain(); revInA.gain.value = 1;
     revInA.connect(convA); convA.connect(sum);
 
     // shimmer path — bright short IR + modulated feedback delay
-    shimHP = ctx.createBiquadFilter(); shimHP.type = 'highpass'; shimHP.frequency.value = 1800;
-    convB = ctx.createConvolver(); convB.buffer = makeIR(2.6, 1.6);
+    shimHP = ctx.createBiquadFilter(); shimHP.type = 'highpass';
+    shimHP.frequency.value = LITE ? 2200 : 1800;
+    convB = ctx.createConvolver(); convB.buffer = makeIR(LITE ? 1.5 : 2.6, 1.6);
     shimDelay = ctx.createDelay(2); shimDelay.delayTime.value = 0.55;
     const shimMod = mkOsc(0.09, 'sine'), shimModG = ctx.createGain(); shimModG.gain.value = 0.04;
     shimMod.connect(shimModG); shimModG.connect(shimDelay.delayTime); shimMod.start();
-    shimFB = ctx.createGain(); shimFB.gain.value = 0.7;
+    shimFB = ctx.createGain(); shimFB.gain.value = LITE ? 0.6 : 0.7;
     shimOut = ctx.createGain(); shimOut.gain.value = 0.9;
     shimHP.connect(convB); convB.connect(shimOut); shimOut.connect(sum);
     convB.connect(shimDelay); shimDelay.connect(shimFB); shimFB.connect(shimHP);
 
-    // buses
+    // buses — lvl (moment level) and duck (thump dips) are SEPARATE params:
+    // never cancel each other's automation (that snap was a pop source)
     const mkBus = () => {
       const input = ctx.createGain();
-      const duck = ctx.createGain();
+      const lvl = ctx.createGain(); lvl.gain.value = 0;
+      const duck = ctx.createGain(); duck.gain.value = 1;
       const dry = ctx.createGain(), rev = ctx.createGain(), shim = ctx.createGain();
-      input.connect(duck);
+      input.connect(lvl); lvl.connect(duck);
       dry.connect(sum); rev.connect(revInA); shim.connect(shimHP);
       duck.connect(dry); duck.connect(rev); duck.connect(shim);
-      return { in: input, duck, dry, rev, shim };
+      return { in: input, lvl, duck, dry, rev, shim };
     };
     bus.pad = mkBus(); bus.voice = mkBus(); bus.glitch = mkBus(); bus.sub = mkBus();
 
@@ -143,7 +173,6 @@ window.Engine = (function () {
     subOsc.connect(bus.sub.in); subOct.connect(subOctG); subOctG.connect(bus.sub.in);
     subOsc.start(); subOct.start();
     setSends(bus.sub, { dry: 1, rev: 0, shim: 0 });
-    bus.sub.duck.gain.value = 0.0;
   }
 
   function setSends(b, lv, tau) {
@@ -159,10 +188,10 @@ window.Engine = (function () {
     if (!ctx) return;
     Object.assign(cur, p);
     const t = ctx.currentTime;
-    bus.pad.duck.gain.setTargetAtTime(p.padLvl, t, 1.1);
-    bus.voice.duck.gain.setTargetAtTime(p.voiceLvl, t, 1.1);
-    bus.glitch.duck.gain.setTargetAtTime(p.glitchLvl, t, 1.1);
-    bus.sub.duck.gain.setTargetAtTime(p.subLvl * 0.5, t, 1.6);
+    bus.pad.lvl.gain.setTargetAtTime(p.padLvl, t, 1.1);
+    bus.voice.lvl.gain.setTargetAtTime(p.voiceLvl, t, 1.1);
+    bus.glitch.lvl.gain.setTargetAtTime(p.glitchLvl, t, 1.1);
+    bus.sub.lvl.gain.setTargetAtTime(p.subLvl * 0.5, t, 1.6);
     const sh = clamp(p.shimmer, 0, 1.4), sp = clamp(p.space, 0, 1.4);
     setSends(bus.pad, { dry: .8 * sp, rev: .95 * sp, shim: .5 * sh }, 1.1);
     setSends(bus.voice, { dry: .28, rev: 1.05 * sp, shim: .9 * sh }, 1.1);
@@ -171,11 +200,10 @@ window.Engine = (function () {
   }
 
   function duckPads(t) {
+    // dips only the dedicated duck param; never cancels anything
     const g = bus.pad.duck.gain;
-    const v = cur.padLvl;
-    g.cancelScheduledValues(t);
-    g.setTargetAtTime(v * 0.72, t, 0.02);
-    g.setTargetAtTime(v, t + 0.1, 0.09);
+    g.setTargetAtTime(0.74, t, 0.02);
+    g.setTargetAtTime(1, t + 0.1, 0.09);
   }
 
   /* ---------- pads: the bent, smeared wall ---------- */
@@ -188,7 +216,8 @@ window.Engine = (function () {
     const peak = 0.34 / Math.sqrt(Math.max(3, midis.length));
     midis.forEach((m, vi) => {
       const f = mtof(m);
-      for (let k = 0; k < 2; k++) {
+      const voices = LITE ? 1 : 2;   // phones: half the oscillator stack
+      for (let k = 0; k < voices; k++) {
         const o = ctx.createOscillator();
         o.type = k ? 'triangle' : 'sawtooth';
         const staticCents = p.bend * (14 + Math.random() * 40) * (Math.random() < 0.5 ? -1 : 1);
@@ -214,9 +243,9 @@ window.Engine = (function () {
         const co = clamp(p.cutoff * (0.8 + Math.random() * 0.5), 120, 12000);
         fl.frequency.setValueAtTime(co * 0.55, when);
         fl.frequency.linearRampToValueAtTime(co, when + Math.max(1, dur * 0.5));
-        const wl = mkOsc(0.03 + Math.random() * 0.09, 'sine');
+        const wl = LITE ? null : mkOsc(0.03 + Math.random() * 0.09, 'sine');
         const wg = ctx.createGain(); wg.gain.value = co * 0.28;
-        wl.connect(wg); wg.connect(fl.frequency);
+        if (wl) { wl.connect(wg); wg.connect(fl.frequency); }
 
         const fz = ctx.createWaveShaper();
         fz.curve = fuzzCurve(1 + p.fuzz * 6.5);
@@ -230,7 +259,7 @@ window.Engine = (function () {
         o.connect(fl); fl.connect(fz); fz.connect(g); g.connect(bus.pad.in);
         o.start(when); o.stop(stop);
         bl.start(when); bl.stop(stop);
-        wl.start(when); wl.stop(stop);
+        if (wl) { wl.start(when); wl.stop(stop); }
       }
       padPrev[vi] = f;
     });
@@ -295,7 +324,7 @@ window.Engine = (function () {
 
   function glitchStep(t, p, rng, stepIndex) {
     if (!ctx) return;
-    const dens = p.dens * (p.dynDensity || 1);
+    const dens = p.dens * (p.dynDensity || 1) * (LITE ? 0.7 : 1);
     if (dens <= 0.001) return;
     const type = p.glitchType;
 
@@ -309,7 +338,10 @@ window.Engine = (function () {
       if (type === 'grain') f.frequency.value = 700 + rng() * 3600;
       const g = ctx.createGain();
       const pk = 0.05 + rng() * 0.1;
-      g.gain.setValueAtTime(pk, t);
+      // 2ms fade-in: kills the discontinuity click on onset (Bluetooth codecs
+      // pre-echo these into audible pops)
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(pk, t + 0.002);
       g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
       let tail = s;
       if (type === 'grain' && rng() < 0.5) {
@@ -327,8 +359,9 @@ window.Engine = (function () {
       o.frequency.setValueAtTime(64, t);
       o.frequency.exponentialRampToValueAtTime(38, t + 0.11);
       const g = ctx.createGain();
-      g.gain.setValueAtTime(0.34, t);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.34, t + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.17);
       o.connect(g); g.connect(bus.glitch.in);
       o.start(t); o.stop(t + 0.2);
       duckPads(t);
@@ -341,7 +374,8 @@ window.Engine = (function () {
         const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 5000;
         const g = ctx.createGain();
         const tt = t + i * 0.036;
-        g.gain.setValueAtTime(0.07, tt);
+        g.gain.setValueAtTime(0.0001, tt);
+        g.gain.linearRampToValueAtTime(0.07, tt + 0.001);
         g.gain.exponentialRampToValueAtTime(0.0001, tt + 0.03);
         s.connect(f); f.connect(g); g.connect(bus.glitch.in);
         s.start(tt, rng()); s.stop(tt + 0.05);
@@ -371,7 +405,7 @@ window.Engine = (function () {
     const t = ctx.currentTime;
     master.gain.cancelScheduledValues(t);
     master.gain.setValueAtTime(0.0001, t);
-    master.gain.linearRampToValueAtTime(0.9, t + 2.6);
+    master.gain.linearRampToValueAtTime(0.85, t + 2.6);
   }
   function fadeOut(sec) {
     if (!ctx) return;
@@ -384,6 +418,7 @@ window.Engine = (function () {
   return {
     init, applyParams, spawnChord, spawnVoice, glitchStep,
     bands, onPulse, fadeIn, fadeOut,
+    get lite() { return LITE; },
     get now() { return ctx ? ctx.currentTime : 0; },
     get started() { return !!ctx; },
     mtof

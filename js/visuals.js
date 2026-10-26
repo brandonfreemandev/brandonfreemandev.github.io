@@ -21,8 +21,11 @@ window.Visuals = (function () {
   let bloomFx = null;        // {col:[r,g,b], t0}
   let ended = false;
 
+  const LITE = !!(window.Engine && Engine.lite);
+  const ORB_COUNT = LITE ? 4 : 7;
+
   const orbs = [];
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < ORB_COUNT; i++) {
     orbs.push({
       w1: .05 + Math.random() * .07, w2: .04 + Math.random() * .07,
       p1: Math.random() * 9, p2: Math.random() * 9,
@@ -42,7 +45,7 @@ window.Visuals = (function () {
   }
 
   function resize() {
-    DPR = Math.min(1.5, window.devicePixelRatio || 1);
+    DPR = Math.min(LITE ? 1 : 1.5, window.devicePixelRatio || 1);
     W = Math.floor(innerWidth * DPR); H = Math.floor(innerHeight * DPR);
     cvs.width = W; cvs.height = H;
     fbA.width = W; fbA.height = H; fbB.width = W; fbB.height = H;
@@ -80,9 +83,9 @@ window.Visuals = (function () {
 
     /* ---- 1. feedback pass: fbA → fbB, scaled/rotated/faded ---- */
     const src = fa, dst = fb;
-    // fade toward bg
+    // fade toward bg (slightly faster fade in lite mode: shorter accumulation)
     dst.globalCompositeOperation = 'source-over';
-    dst.fillStyle = `rgba(${palette.bg[0]},${palette.bg[1]},${palette.bg[2]},${ended ? 0.012 : 0.045})`;
+    dst.fillStyle = `rgba(${palette.bg[0]},${palette.bg[1]},${palette.bg[2]},${ended ? 0.012 : (LITE ? 0.06 : 0.045)})`;
     dst.fillRect(0, 0, W, H);
 
     const scale = 1.0045 + bands.mid * 0.006;
@@ -137,15 +140,17 @@ window.Visuals = (function () {
     }
     dst.globalCompositeOperation = 'source-over';
 
-    /* ---- 3. present fbB with chromatic ghosts ---- */
+    /* ---- 3. present fbB (chromatic ghosts skipped in lite mode) ---- */
     vctx.clearRect(0, 0, W, H);
     vctx.drawImage(fbB, 0, 0);
-    const off = 1.4 * DPR + bands.high * 3 * DPR;
-    vctx.globalCompositeOperation = 'lighter';
-    vctx.globalAlpha = 0.1 + bands.high * 0.12;
-    vctx.drawImage(fbB, -off, 0);
-    vctx.drawImage(fbB, off, off * 0.4);
-    vctx.globalAlpha = 1;
+    if (!LITE) {
+      const off = 1.4 * DPR + bands.high * 3 * DPR;
+      vctx.globalCompositeOperation = 'lighter';
+      vctx.globalAlpha = 0.1 + bands.high * 0.12;
+      vctx.drawImage(fbB, -off, 0);
+      vctx.drawImage(fbB, off, off * 0.4);
+      vctx.globalAlpha = 1;
+    }
 
     /* ---- 4. fork window glows on the edges ---- */
     if (forkGlow) {
