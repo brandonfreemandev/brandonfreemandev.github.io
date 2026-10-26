@@ -28,7 +28,7 @@ window.Engine = (function () {
   })();
 
   let ctx = null;
-  let sum, tape, soft, comp, master, analyser;
+  let sum, tape, soft, comp, master, analyser, breath;
   let convA, convB, shimHP, shimDelay, shimFB, shimOut, shimTrim;
   let tilt, padTilt;
   const bus = {}; // pad, voice, glitch, sub — each: {in, duck, dry, rev, shim}
@@ -135,7 +135,9 @@ window.Engine = (function () {
     tilt = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
     if (tilt) { comp.connect(tilt); tilt.connect(master); }
     else comp.connect(master);
-    master.connect(analyser); analyser.connect(ctx.destination);
+    breath = ctx.createGain(); breath.gain.value = 1;
+    master.connect(breath); breath.connect(analyser);
+    analyser.connect(ctx.destination);
     wow.start(); flut.start();
 
     // reverb A — long hall (shorter tail in lite mode)
@@ -442,9 +444,19 @@ window.Engine = (function () {
     master.gain.linearRampToValueAtTime(0.0001, t + sec);
   }
 
+  /* a soft dip-and-return of the master around phone rotation: any residual
+   * underrun click scales with signal level, so the breath lowers the click
+   * floor on weak devices — and just sounds like the piece turning over */
+  function breathe() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    breath.gain.setTargetAtTime(0.72, t, 0.16);
+    breath.gain.setTargetAtTime(1, t + 0.55, 0.5);
+  }
+
   return {
     init, applyParams, spawnChord, spawnVoice, glitchStep,
-    bands, onPulse, fadeIn, fadeOut, setPresence,
+    bands, onPulse, fadeIn, fadeOut, setPresence, breathe,
     get lite() { return LITE; },
     get now() { return ctx ? ctx.currentTime : 0; },
     get started() { return !!ctx; },

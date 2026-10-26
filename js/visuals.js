@@ -75,6 +75,8 @@ window.Visuals = (function () {
     if (snap) {
       fa.drawImage(snap, 0, 0, W, H);
       fb.drawImage(snap, 0, 0, W, H);
+      // a real turn (not the initial layout): the piece takes a soft breath
+      if (window.Engine && Engine.started && typeof Engine.breathe === 'function') Engine.breathe();
     }
     resizes++;
     quietUntil = performance.now() + 700;
@@ -147,7 +149,9 @@ window.Visuals = (function () {
 
     /* ---- 2. paint light orbs (also faintly stamped into feedback) ---- */
     dst.globalCompositeOperation = 'lighter';
-    for (const o of orbs) {
+    const stride = quiet ? 2 : 1;                    // half the orbs during a turn
+    for (let oi = 0; oi < orbs.length; oi += stride) {
+      const o = orbs[oi];
       const b = bands[o.band] || 0;
       const x = W / 2 + Math.sin(tt * o.w1 + o.p1) * W * 0.31 + pres.x * W * 0.05;
       const y = H / 2 + Math.cos(tt * o.w2 + o.p2) * H * 0.31 - pres.y * H * 0.05;
