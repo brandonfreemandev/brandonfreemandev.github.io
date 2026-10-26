@@ -158,6 +158,12 @@ twitches. On phones, enable **feel tilt** on the begin screen (iOS shows its
 motion-permission prompt; without it, touch-drag does the same job). Where
 your hand rests is how the room stays lit — centre is neutral.
 
+**Rotating the phone** doesn't hiccup: canvas reallocation is debounced until
+the turn settles, the old light-field is carried over stretched (the turn
+reads as a dissolve, never a wipe), and the renderer runs its cheapest frames
+for ~0.7 s around the turn so the audio thread is never starved. Both
+orientations stay first-class.
+
 ---
 
 ## Sound design (all Web Audio, zero samples)

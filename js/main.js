@@ -51,6 +51,7 @@
         stillness: +D.Behavior.stillness.toFixed(3),
         presence: { x: +Presence.px.toFixed(2), y: +Presence.py.toFixed(2), e: +Presence.energy.toFixed(2) },
         motionActive: Presence.motionActive,
+        canvasResizes: Visuals.resizes, canvasQuiet: Visuals.quiet,
         phase: D.Env.phase, tempC: D.Env.tempC, tempSource: D.Env.tempSource,
         replayMode, started: st.started, ended: st.ended
       };

@@ -45,14 +45,45 @@ window.Visuals = (function () {
     palette = { bg: hex2rgb(P[0]), cols: P.slice(1).map(hex2rgb) };
   }
 
-  function resize() {
-    DPR = Math.min(LITE ? 1 : 1.5, window.devicePixelRatio || 1);
-    W = Math.floor(innerWidth * DPR); H = Math.floor(innerHeight * DPR);
+  /* Rotation without the hiccup:
+   *  - reallocation is debounced until the turn settles (~a third of a
+   *    second); meanwhile the CSS box simply stretches the old bitmap,
+   *    which the browser composites on the GPU — no jank, and a stretched
+   *    light-field is on-brand
+   *  - when we do reallocate, the accumulated feedback image is carried
+   *    over stretched into the new frames — the turn reads as a dissolve,
+   *    never a wipe
+   *  - for ~0.7 s around the turn the renderer does its cheapest frames,
+   *    staying out of the way of the OS rotation compositing (this is what
+   *    protected the audio from main-thread starvation clicks) */
+  let resizeTimer = 0, resizes = 0, quietUntil = 0;
+
+  function applyResize() {
+    const dpr = Math.min(LITE ? 1 : 1.5, window.devicePixelRatio || 1);
+    const w2 = Math.floor(innerWidth * dpr), h2 = Math.floor(innerHeight * dpr);
+    if (w2 === W && h2 === H) return;
+
+    let snap = null;
+    if (W > 0 && H > 0) {
+      snap = document.createElement('canvas');
+      snap.width = W; snap.height = H;
+      snap.getContext('2d').drawImage(fbA, 0, 0);
+    }
+    DPR = dpr; W = w2; H = h2;
     cvs.width = W; cvs.height = H;
     fbA.width = W; fbA.height = H; fbB.width = W; fbB.height = H;
+    if (snap) {
+      fa.drawImage(snap, 0, 0, W, H);
+      fb.drawImage(snap, 0, 0, W, H);
+    }
+    resizes++;
+    quietUntil = performance.now() + 700;
   }
-  addEventListener('resize', resize);
-  resize();
+  addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(applyResize, 320);
+  });
+  applyResize();
 
   /* noise tile for grain */
   const grain = document.createElement('canvas');
@@ -80,6 +111,7 @@ window.Visuals = (function () {
   function frame(t) {
     requestAnimationFrame(frame);
     if (document.hidden) return;
+    const quiet = performance.now() < quietUntil;   // cheapest frames during a turn
     const bands = Engine.started ? Engine.bands() : { sub: 0, low: 0, mid: 0, high: 0, air: 0 };
     const tt = t / 1000;
 
@@ -144,14 +176,14 @@ window.Visuals = (function () {
     }
 
     // sustained fast motion keeps the image liquid
-    if (pres.e > 0.5) melt(pres.e * 0.45);
+    if (pres.e > 0.5 && !quiet) melt(pres.e * 0.45);
 
     dst.globalCompositeOperation = 'source-over';
 
-    /* ---- 3. present fbB (chromatic ghosts skipped in lite mode) ---- */
+    /* ---- 3. present fbB (chromatic ghosts skipped in lite mode / turns) ---- */
     vctx.clearRect(0, 0, W, H);
     vctx.drawImage(fbB, 0, 0);
-    if (!LITE) {
+    if (!LITE && !quiet) {
       const off = 1.4 * DPR + bands.high * 3 * DPR;
       vctx.globalCompositeOperation = 'lighter';
       vctx.globalAlpha = 0.1 + bands.high * 0.12;
@@ -176,11 +208,13 @@ window.Visuals = (function () {
     }
 
     /* ---- 5. grain + vignette ---- */
-    vctx.globalAlpha = 0.05;
-    vctx.globalCompositeOperation = 'overlay';
-    vctx.drawImage(grain, Math.random() * 40, Math.random() * 40, 120, 120, 0, 0, W, H);
-    vctx.globalCompositeOperation = 'source-over';
-    vctx.globalAlpha = 1;
+    if (!quiet) {
+      vctx.globalAlpha = 0.05;
+      vctx.globalCompositeOperation = 'overlay';
+      vctx.drawImage(grain, Math.random() * 40, Math.random() * 40, 120, 120, 0, 0, W, H);
+      vctx.globalCompositeOperation = 'source-over';
+      vctx.globalAlpha = 1;
+    }
 
     const vg = vctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
     vg.addColorStop(0, 'rgba(0,0,0,0)');
@@ -194,5 +228,9 @@ window.Visuals = (function () {
   }
   requestAnimationFrame(frame);
 
-  return { setPalette, melt, setPresence, forkWindow, bloom, finish };
+  return {
+    setPalette, melt, setPresence, forkWindow, bloom, finish,
+    get resizes() { return resizes; },
+    get quiet() { return performance.now() < quietUntil; }
+  };
 })();
