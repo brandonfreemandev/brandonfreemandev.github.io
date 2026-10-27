@@ -149,14 +149,15 @@ Your physical presence modulates both sound and image, continuously:
 
 | signal | source | what it bends |
 |---|---|---|
-| **position x** | mouse on desktop; phone tilt (accelerometer) | the mix leans with you (±0.35 pan); the light field drifts and slowly spirals toward your side |
+| **position x** | pointer — mouse on desktop, touch-drag on phone | the mix leans with you (±0.35 pan); the light field drifts and slowly spirals toward your side |
 | **position y** | same | up lifts the veil (shimmer send +40%); down darkens the pad wall (lowpass to ~6 kHz); orbs parallax vertically |
-| **energy** | how fast you move / shake | shimmer feedback swells (up to +0.12), glitch density rises, and the image momentarily liquifies |
+| **energy** | how fast you move | shimmer feedback swells (up to +0.12), glitch density rises, and the image momentarily liquifies |
 
 Everything is heavily smoothed (τ ≈ 0.6–1.7 s) — the room *leans*, it never
-twitches. On phones, enable **feel tilt** on the begin screen (iOS shows its
-motion-permission prompt; without it, touch-drag does the same job). Where
-your hand rests is how the room stays lit — centre is neutral.
+twitches. Where your hand rests is how the room stays lit — centre is neutral.
+(An accelerometer tilt mode existed briefly but kept main-thread wakeups at
+sensor rate, which janked mid-range phones, so it was removed in favour of
+consistent performance across devices.)
 
 **Rotating the phone** doesn't hiccup: canvas reallocation is debounced until
 the turn settles, the old light-field is carried over stretched (the turn

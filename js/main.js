@@ -50,7 +50,6 @@
         choices: st.choices.slice(), tint: { ...st.tint },
         stillness: +D.Behavior.stillness.toFixed(3),
         presence: { x: +Presence.px.toFixed(2), y: +Presence.py.toFixed(2), e: +Presence.energy.toFixed(2) },
-        motionActive: Presence.motionActive,
         canvasResizes: Visuals.resizes, canvasQuiet: Visuals.quiet,
         phase: D.Env.phase, tempC: D.Env.tempC, tempSource: D.Env.tempSource,
         replayMode, started: st.started, ended: st.ended
@@ -303,27 +302,6 @@
   }
 
   /* ---------- boot ---------- */
-
-  // accelerometer toggle (shown only where it can work; iOS needs the gesture)
-  const motionRow = document.getElementById('motion-row');
-  const motionBox = document.getElementById('motion');
-  const motionState = document.getElementById('motion-state');
-  if (Presence.motionCapable) motionRow.style.display = '';
-  motionBox.addEventListener('change', () => {
-    if (motionBox.checked) {
-      Presence.enable((ok, why) => {
-        if (ok) { motionState.textContent = 'attuned'; UI.toast('tilt attuned — lean gently'); }
-        else {
-          motionBox.checked = false;
-          motionState.textContent = why === 'denied' ? 'permission denied' : 'unavailable';
-          UI.toast(why === 'denied' ? 'motion permission was denied' : 'no accelerometer here');
-        }
-      });
-    } else {
-      Presence.disable();
-      motionState.textContent = '';
-    }
-  });
 
   UI.showBegin(replayMode);
   UI.beginBtn.addEventListener('click', begin);
